@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  AfterAllowTestTraffic
+  Use to run tasks after the test listener serves traffic to the replacement task set. 
+  The results of a hook function at this point can trigger a rollback.
+Globals:
+  Function:
+    Timeout: 900
+    Environment:
+      Variables:
+        TEST_LISTENER: "http://xxxx"
+        TELEGRAM_TOKEN: "xxx"
+        TELEGRAM_CHAT: "xxx"
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: AfterAllowTestTraffic/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Policies:
+        - Statement:
+            - Sid: CodeDeploy
+              Effect: Allow
+              Action:
+                - codedeploy:PutLifecycleEventHookExecutionStatus
+              Resource: "*"

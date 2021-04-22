@@ -1,0 +1,42 @@
+version: 0.2
+
+env:
+  shell: bash
+  exported-variables:
+    - IMAGE_TAG
+phases:
+  install:
+    runtime-versions:
+      docker: 19
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)
+      - ACCOUNT_ID=$(aws sts get-caller-identity | jq -r .Account)
+      - REPOSITORY_URI=$(aws ecr describe-repositories --repository-names $ECR_REPO | jq -r '.repositories[].repositoryUri')
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -f ./ecs/Dockerfile -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - |
+        echo Writing taskdefinition file...
+        sed -i "s#{{IMAGE_TAG}}#$IMAGE_TAG#g" ./ecs/taskdef.json
+        sed -i "s#{{REGION}}#$AWS_DEFAULT_REGION#g" ./ecs/taskdef.json
+        sed -i "s#{{ECR_REPO}}#$ECR_REPO#g" ./ecs/taskdef.json
+        sed -i "s#{{ACCOUNT_ID}}#$ACCOUNT_ID#g" ./ecs/taskdef.json
+        cat ./ecs/taskdef.json
+      - cp ./ecs/appspec.yml .
+      - cp ./ecs/taskdef.json .
+artifacts:
+  files: ["appspec.yml", "taskdef.json"]
